@@ -1,0 +1,39 @@
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# .NET build output
+[Bb]in/
+[Oo]bj/
+
+# Test results
+TestResults/
+*.trx
+
+# Local databases and SQLite sidecar files
+*.db
+*.db-shm
+*.db-wal
+
+# Local configuration and secrets
+appsettings.Local.json
+appsettings.*.local.json
+
+# Coverage and tooling output
+coverage/
+*.coverage
+*.coveragexml
+
+# IDE and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# NuGet and publish output
+*.nupkg
+*.snupkg
+publish/

@@ -1,0 +1,148 @@
+@page "/chat"
+@using Microsoft.AspNetCore.SignalR.Client
+@using Microsoft.AspNetCore.Components.Web
+@inject InvestorChat.Client.Services.AuthService AuthService
+@inject NavigationManager NavigationManager
+@implements IAsyncDisposable
+
+<title>Czat</title>
+
+@if (!AuthService.IsAuthenticated)
+{
+    <div class="auth-box">
+        <h1>Brak dostępu</h1>
+        <p>Musisz się zalogować, aby używać czatu.</p>
+        <button class="primary-button" @onclick="GoToLogin">Zaloguj się</button>
+    </div>
+}
+else
+{
+    <div class="chat-shell">
+        <div class="chat-header">
+            <h1>Czat</h1>
+            <span class="status-badge @(IsConnected ? "connected" : "disconnected")">@connectionStatus</span>
+        </div>
+
+        <div class="messages">
+            @if (messages.Count == 0)
+            {
+                <p class="empty-state">Brak wiadomości. Bądź pierwszy i napisz coś!</p>
+            }
+            else
+            {
+                @foreach (var message in messages)
+                {
+                    <div class="message-item">
+                        <div class="message-meta">
+                            <strong>@message.User</strong>
+                            <span>@message.Timestamp</span>
+                        </div>
+                        <div class="message-body">@message.Text</div>
+                    </div>
+                }
+            }
+        </div>
+
+        <div class="composer">
+<input @bind="messageInput" @onkeydown="HandleKeyDown" />
+            <button class="primary-button" @onclick="SendMessageAsync" disabled="@(!IsConnected)">Wyślij</button>
+        </div>
+    </div>
+}
+
+@code {
+    private readonly List<MessageItem> messages = new();
+    private HubConnection? hubConnection;
+    private string messageInput = string.Empty;
+    private string connectionStatus = "Łączenie...";
+
+    private bool IsConnected => hubConnection?.State == HubConnectionState.Connected;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            NavigationManager.NavigateTo("/login");
+            return;
+        }
+
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"), options =>
+            {
+                options.AccessTokenProvider = () => Task.FromResult<string?>(AuthService.Token);
+            })
+            .WithAutomaticReconnect()
+            .Build();
+
+        hubConnection.On<string, string, string>("ReceiveMessage", (user, text, timestamp) =>
+        {
+            messages.Add(new MessageItem { User = user, Text = text, Timestamp = timestamp });
+            InvokeAsync(StateHasChanged);
+        });
+
+        try
+        {
+            await hubConnection.StartAsync();
+            connectionStatus = "Połączono";
+        }
+        catch (Exception ex)
+        {
+            connectionStatus = $"Błąd: {ex.Message}";
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SendMessageAsync()
+    {
+        if (hubConnection is null || !IsConnected)
+        {
+            return;
+        }
+
+        var text = messageInput.Trim();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        try
+        {
+            await hubConnection.SendAsync("SendMessage", text);
+            messageInput = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            connectionStatus = $"Błąd wysyłania: {ex.Message}";
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+        {
+            await SendMessageAsync();
+        }
+    }
+
+    private void GoToLogin()
+    {
+        NavigationManager.NavigateTo("/login");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+
+    private sealed class MessageItem
+    {
+        public string User { get; set; } = string.Empty;
+        public string Text { get; set; } = string.Empty;
+        public string Timestamp { get; set; } = string.Empty;
+    }
+}

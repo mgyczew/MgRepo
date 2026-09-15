@@ -1,0 +1,80 @@
+@inject InvestorChat.Client.Services.AuthService AuthService
+@inject NavigationManager NavigationManager
+@implements IDisposable
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">ChatApp</a>
+    </div>
+</div>
+
+<div class="nav-scrollable">
+    <nav class="flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span aria-hidden="true"></span> Start
+            </NavLink>
+        </div>
+        @if (!AuthService.IsAuthenticated)
+        {
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="login">
+                    <span aria-hidden="true"></span> Logowanie
+                </NavLink>
+            </div>
+        }
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="chat">
+                <span aria-hidden="true"></span> Czat
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="akcje">
+                <span aria-hidden="true"></span> Akcje
+            </NavLink>
+        </div>
+        @if (AuthService.IsAuthenticated)
+        {
+            <div class="nav-item px-3">
+                <button class="nav-link btn btn-link text-start" @onclick="Logout">
+                    Wyloguj (@AuthService.UserName)
+                </button>
+            </div>
+        }
+    </nav>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        // Subscribe to auth state changes so the menu updates when user logs in/out
+        AuthService.AuthStateChanged += OnAuthStateChanged;
+    }
+
+    private void OnAuthStateChanged()
+    {
+        // Ensure subscriber updates don't throw synchronously into the JS runtime
+        InvokeAsync(() =>
+        {
+            try
+            {
+                StateHasChanged();
+            }
+            catch
+            {
+                // ignore UI update errors
+            }
+        });
+    }
+
+    private void Logout()
+    {
+        AuthService.Logout();
+        NavigationManager.NavigateTo("/login");
+    }
+
+    public void Dispose()
+    {
+        AuthService.AuthStateChanged -= OnAuthStateChanged;
+    }
+}

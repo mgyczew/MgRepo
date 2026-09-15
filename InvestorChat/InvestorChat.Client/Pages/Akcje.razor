@@ -1,0 +1,112 @@
+@page "/akcje"
+@using Microsoft.AspNetCore.SignalR.Client
+@using Microsoft.AspNetCore.Components.Web
+@inject NavigationManager NavigationManager
+@implements IAsyncDisposable
+
+<PageTitle>Akcje na żywo</PageTitle>
+
+<section class="market-dashboard">
+    <header class="market-header">
+        <div>
+            <p class="eyebrow">RYNEK WARSZAWSKI</p>
+            <h1>Akcje na żywo</h1>
+            <p class="market-subtitle">Notowania aktualizują się automatycznie co kilka sekund.</p>
+        </div>
+        <div class="market-status @(isConnected ? "is-live" : "is-offline")">
+            <span class="status-dot"></span>
+            @(isConnected ? "NA ŻYWO" : "ŁĄCZENIE...")
+        </div>
+    </header>
+
+    <div class="market-toolbar">
+        <span><strong>@quotes.Count</strong> obserwowanych spółek</span>
+        <span>Ostatnia aktualizacja: <strong>@lastUpdate</strong></span>
+    </div>
+
+    <div class="market-grid">
+        @foreach (var q in quotes)
+        {
+            <article class="quote-card @(q.Change >= 0 ? "quote-up" : "quote-down")">
+                <div class="quote-topline">
+                    <div>
+                        <span class="symbol-mark">@q.Symbol.Substring(0, 1)</span>
+                        <span class="symbol">@q.Symbol</span>
+                    </div>
+                    <span class="quote-time">@q.Time</span>
+                </div>
+                <div class="price-row">
+                    <span class="price">@q.Price.ToString("0.00")</span>
+                    <span class="currency">PLN</span>
+                </div>
+                <div class="quote-bottomline">
+                    <span class="change-arrow">@(q.Change >= 0 ? "▲" : "▼")</span>
+                    <span class="change">@((q.Change >= 0 ? "+" : "") + q.Change.ToString("0.00"))</span>
+                    <span class="change-label">dzisiaj</span>
+                </div>
+                <div class="quote-track"><span></span></div>
+            </article>
+        }
+    </div>
+</section>
+
+@code {
+    private HubConnection? hubConnection;
+    private readonly List<Quote> quotes = new();
+    private readonly string[] symbols = new[] { "PZU", "KETY", "RAINBOW", "PEAKO", "TEXT", "KRUK" };
+    private bool isConnected;
+    private string lastUpdate = "--:--:--";
+
+    protected override async Task OnInitializedAsync()
+    {
+        foreach (var s in symbols)
+        {
+            quotes.Add(new Quote { Symbol = s, Price = 0, Change = 0, Time = "--:--" });
+        }
+
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(NavigationManager.ToAbsoluteUri("/markethub"))
+            .WithAutomaticReconnect()
+            .Build();
+
+        hubConnection.On<string, decimal, decimal, string>("ReceiveQuote", (symbol, price, change, time) =>
+        {
+            var q = quotes.FirstOrDefault(x => x.Symbol == symbol);
+            if (q != null)
+            {
+                q.Price = price;
+                q.Change = change;
+                q.Time = time;
+                lastUpdate = time;
+                InvokeAsync(StateHasChanged);
+            }
+        });
+
+        try
+        {
+            await hubConnection.StartAsync();
+            isConnected = true;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            isConnected = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+
+    private sealed class Quote
+    {
+        public string Symbol { get; set; } = string.Empty;
+        public decimal Price { get; set; }
+        public decimal Change { get; set; }
+        public string Time { get; set; } = string.Empty;
+    }
+}

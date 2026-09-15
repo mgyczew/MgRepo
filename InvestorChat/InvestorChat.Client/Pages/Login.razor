@@ -1,0 +1,162 @@
+@page "/login"
+@inject InvestorChat.Client.Services.AuthService AuthService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Logowanie</PageTitle>
+
+@if (AuthService.IsAuthenticated)
+{
+    <div class="auth-box">
+        <h1>Jesteś zalogowany</h1>
+        <p>Jesteś zalogowany jako <strong>@AuthService.UserName</strong>.</p>
+        <button class="primary-button" @onclick="GoToChat">Przejdź do czatu</button>
+        <button class="secondary-button" @onclick="Logout">Wyloguj</button>
+    </div>
+}
+else
+{
+    <div class="auth-box">
+        <h1>Logowanie i rejestracja</h1>
+
+        <div class="auth-form">
+            <div class="form-grid">
+                <label>
+                    Nazwa użytkownika
+                    <input @bind="userName" required />
+                </label>
+
+                <label>
+                    Email
+                    <input @bind="email" type="email" />
+                </label>
+
+                <label>
+                    Hasło
+                    <input @bind="password" type="password" required />
+                </label>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                <div class="error-box">@errorMessage</div>
+            }
+
+            <div class="button-row">
+                <button type="button" class="primary-button" @onclick="HandleLoginAsync" disabled="@isBusy">Zaloguj</button>
+                <button type="button" class="secondary-button" @onclick="HandleRegisterAsync" disabled="@isBusy">Zarejestruj</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private string userName = string.Empty;
+    private string email = string.Empty;
+    private string password = string.Empty;
+    private string errorMessage = string.Empty;
+    private bool isBusy;
+
+    protected override void OnInitialized()
+    {
+        if (AuthService.IsAuthenticated)
+        {
+            NavigationManager.NavigateTo("/chat");
+        }
+    }
+
+    private void GoToChat()
+    {
+        NavigationManager.NavigateTo("/chat");
+    }
+
+    private void Logout()
+    {
+        AuthService.Logout();
+        NavigationManager.NavigateTo("/login");
+    }
+
+    private async Task HandleLoginAsync()
+    {
+        userName = userName.Trim();
+        password = password.Trim();
+
+        if (string.IsNullOrWhiteSpace(userName) || string.IsNullOrWhiteSpace(password))
+        {
+            errorMessage = "Nazwa użytkownika i hasło są wymagane.";
+            return;
+        }
+
+        await ExecuteAuthAsync(async () =>
+        {
+            var result = await AuthService.LoginAsync(userName, password);
+            if (!string.IsNullOrWhiteSpace(result.UserName))
+            {
+                NavigationManager.NavigateTo("/chat");
+            }
+        });
+    }
+
+    private async Task HandleRegisterAsync()
+    {
+        userName = userName.Trim();
+        email = email.Trim();
+        password = password.Trim();
+
+        if (string.IsNullOrWhiteSpace(userName) || string.IsNullOrWhiteSpace(password))
+        {
+            errorMessage = "Nazwa użytkownika i hasło są wymagane.";
+            return;
+        }
+
+        if (userName.Length < 3)
+        {
+            errorMessage = "Nazwa użytkownika musi mieć co najmniej 3 znaki.";
+            return;
+        }
+
+        if (password.Length < 6)
+        {
+            errorMessage = "Hasło musi mieć co najmniej 6 znaków.";
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(email) && !email.Contains('@'))
+        {
+            errorMessage = "Email ma niepoprawny format.";
+            return;
+        }
+
+        await ExecuteAuthAsync(async () =>
+        {
+            var result = await AuthService.RegisterAsync(userName, email, password);
+            if (!string.IsNullOrWhiteSpace(result.UserName))
+            {
+                NavigationManager.NavigateTo("/chat");
+            }
+        });
+    }
+
+    private async Task ExecuteAuthAsync(Func<Task> action)
+    {
+        if (isBusy)
+        {
+            return;
+        }
+
+        isBusy = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            await action();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+}
